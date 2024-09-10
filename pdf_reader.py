@@ -47,16 +47,54 @@ class PDFReader(QMainWindow):
         self.selected_text_rects = [] 
         self.doc = None
 
+        menubar = self.menuBar()
+        menuFile = QMenu('File', self) # title and parent
+        open_pdf_action = QAction("Open PDF", self) # title and parent
+        open_pdf_action.setStatusTip("Select a new PDF file to open")
+        open_pdf_action.triggered.connect(self.load_pdf)
+        open_pdf_action.setShortcut("Ctrl+O")
+        menuFile.addAction(open_pdf_action)
+
+        menuView = QMenu('View', self)
+        zoom_in_action = QAction("Zoom In", self)
+        zoom_in_action.setStatusTip("Increase page scale")
+        zoom_in_action.setShortcut("Ctrl++")
+        #zoom_in_action.triggered.connect(self.zoom_in)
+        menuView.addAction(zoom_in_action)
+
+        zoom_out_action = QAction("Zoom Out", self)
+        zoom_out_action.setStatusTip("Decrease page scale")
+        zoom_out_action.setShortcut("Ctrl+-")
+        #zoom_out_action.triggered.connect(self.zoom_out)
+        menuView.addAction(zoom_out_action)
+
+        menubar.addMenu(menuFile)
+        menubar.addMenu(menuView)
+
+    #    self.scale_factor = 1.0
+
         self.load_pdf()
+        self.resize_to_fit()
 
     def load_pdf(self):
         """Load the PDF and show the first page."""
         options = QFileDialog.Options()
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "resources/sample.pdf", "PDF Files (*.pdf)", options=options)
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open PDF", "", "PDF Files (*.pdf)", options=options)
         if file_path:
             self.doc = fitz.open(file_path)
             self.current_page = 0
             self.show_page(self.current_page)
+
+    # def zoom_in(self):
+    #     """Increase the scale factor and refresh the page."""
+    #     self.scale_factor += 0.1  # Increase the scale by 10%
+    #     self.show_page(self.current_page)  # Redisplay the current page with the new scale
+
+    # def zoom_out(self):
+    #     """Decrease the scale factor and refresh the page."""
+    #     if self.scale_factor > 0.1:  # Prevent the scale from going too small
+    #         self.scale_factor -= 0.1  # Decrease the scale by 10%
+    #         self.show_page(self.current_page)
 
     def show_page(self, page_number):
         """Display the specified PDF page."""
@@ -71,7 +109,7 @@ class PDFReader(QMainWindow):
         """Calculate the scale factor based on window size and PDF page size."""
         window_width = self.scroll_area.viewport().width()
         page_width = page.rect.width
-        return window_width / page_width
+        return (window_width / page_width)
 
     def next_page(self):
         """Go to the next page."""
@@ -120,6 +158,7 @@ class PDFReader(QMainWindow):
             else:
                 self.show_message("No valid text selected.")
             
+            # Clear the selection after using it
             self.selection_start = None
             self.selection_end = None
             self.selection_rect = None
@@ -130,16 +169,20 @@ class PDFReader(QMainWindow):
         if not self.selection_rect:
             return []
 
+        # Get the current page
         page = self.doc.load_page(self.current_page)
 
+        # Get displayed image and PDF page dimensions
         pixmap_width = self.pdf_label.pixmap().width()
         pixmap_height = self.pdf_label.pixmap().height()
         page_width = page.rect.width
         page_height = page.rect.height
 
+        # Calculate scale factors between the displayed image and the PDF page
         scale_x = page_width / pixmap_width
         scale_y = page_height / pixmap_height
         
+        # Adjust selection to PDF coordinates, including scroll offsets
         scroll_x = self.scroll_area.horizontalScrollBar().value()
         scroll_y = self.scroll_area.verticalScrollBar().value()
 
@@ -148,6 +191,7 @@ class PDFReader(QMainWindow):
         x1 = (self.selection_rect.right() + scroll_x) * scale_x
         y1 = (self.selection_rect.bottom() + scroll_y) * scale_y
 
+        # Get text rectangles from the selected area in the PDF
         text_instances = page.get_text("dict", clip=fitz.Rect(x0, y0, x1, y1))['blocks']
 
         text_rects = []
@@ -163,16 +207,20 @@ class PDFReader(QMainWindow):
         if not self.selection_rect:
             return None
 
+        # Load the current page
         page = self.doc.load_page(self.current_page)
         
+        # Get displayed image and PDF page dimensions
         pixmap_width = self.pdf_label.pixmap().width()
         pixmap_height = self.pdf_label.pixmap().height()
         page_width = page.rect.width
         page_height = page.rect.height
 
+        # Calculate scaling factors
         scale_x = page_width / pixmap_width
         scale_y = page_height / pixmap_height
         
+        # Adjust selection to PDF coordinates, including scroll offsets
         scroll_x = self.scroll_area.horizontalScrollBar().value()
         scroll_y = self.scroll_area.verticalScrollBar().value()
 
@@ -181,11 +229,11 @@ class PDFReader(QMainWindow):
         x1 = (self.selection_rect.right() + scroll_x) * scale_x
         y1 = (self.selection_rect.bottom() + scroll_y) * scale_y
 
+        # Extract text from the selected region
         selected_text = page.get_text("text", clip=fitz.Rect(x0, y0, x1, y1))
 
-        print(f"Selected text: '{selected_text.strip()}'")
-        
         return selected_text.strip() if selected_text else None
+
 
     def search_selected_text(self):
         """Search the selected text in the dictionary."""
