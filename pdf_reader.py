@@ -1,4 +1,4 @@
-import fitz  # PyMuPDF for PDF rendering
+import fitz
 from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QMenu, QFileDialog, QPushButton, QHBoxLayout, QWidget, QAction, QListWidget, QMessageBox
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
 from PyQt5.QtCore import Qt, QRect, QRectF
@@ -12,23 +12,19 @@ class PDFReader(QMainWindow):
         self.setWindowTitle('PDF Reader with Dictionary')
         self.setGeometry(100, 100, 800, 600)
 
-        # Create scroll area to handle PDF page navigation
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.setCentralWidget(self.scroll_area)
 
-        # Create a label to display the PDF page
         self.pdf_label = QLabel()
         self.pdf_label.setAlignment(Qt.AlignCenter)
         self.scroll_area.setWidget(self.pdf_label)
 
-        # Navigation buttons
         self.prev_button = QPushButton("Previous")
         self.next_button = QPushButton("Next")
         self.prev_button.clicked.connect(self.prev_page)
         self.next_button.clicked.connect(self.next_page)
 
-        # Layout for buttons
         self.nav_widget = QWidget()
         self.nav_layout = QHBoxLayout(self.nav_widget)
         self.nav_layout.addWidget(self.prev_button)
@@ -38,24 +34,19 @@ class PDFReader(QMainWindow):
         self.nav_widget.setGeometry(10, 10, 150, 50)
         self.nav_widget.setParent(self)
 
-        # Load the JMDict dictionary (adjust file paths as needed)
-        # Load the JMDict dictionary from the XML file
-        self.dictionary = JMDict('./jmdict/JMdict.xml')
+        self.dictionary = JMDict('./JMdict.xml')
 
-        # Context menu action to trigger dictionary search on selection
         self.context_menu = QMenu(self)
         self.search_action = QAction("Search in Dictionary", self)
         self.search_action.triggered.connect(self.search_selected_text)
         self.context_menu.addAction(self.search_action)
 
-        # Variables for selection handling
         self.selection_start = None
         self.selection_end = None
         self.selection_rect = None
-        self.selected_text_rects = []  # Holds rectangles of selected text
+        self.selected_text_rects = [] 
         self.doc = None
 
-        # Open a PDF file
         self.load_pdf()
 
     def load_pdf(self):
@@ -70,8 +61,8 @@ class PDFReader(QMainWindow):
     def show_page(self, page_number):
         """Display the specified PDF page."""
         page = self.doc.load_page(page_number)
-        scale_factor = self.get_scale_factor(page)  # Pass the page to get_scale_factor
-        pix = page.get_pixmap(matrix=fitz.Matrix(scale_factor, scale_factor))  # Apply scaling
+        scale_factor = self.get_scale_factor(page)
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale_factor, scale_factor))
         img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
         self.pdf_label.setPixmap(QPixmap.fromImage(img))
         self.resize_to_fit()
@@ -104,7 +95,6 @@ class PDFReader(QMainWindow):
         if self.doc is not None:
             self.show_page(self.current_page)
 
-        # Update selection when resized
         if self.selection_rect:
             self.update()
 
@@ -123,15 +113,13 @@ class PDFReader(QMainWindow):
     def mouseReleaseEvent(self, event):
         """End selection and show the context menu for dictionary search."""
         if event.button() == Qt.LeftButton and self.selection_rect:
-            # Ensure the selected text is valid before showing the dictionary option
-            self.selected_text_rects = self.get_selected_text_rects()  # Get selected text rectangles for highlighting
-            selected_text = self.get_selected_text()  # For dictionary lookup
-            if selected_text:  # Only show the dictionary option if text is selected
+            self.selected_text_rects = self.get_selected_text_rects()
+            selected_text = self.get_selected_text()
+            if selected_text:
                 self.context_menu.exec_(event.globalPos())
             else:
                 self.show_message("No valid text selected.")
             
-            # Clear the selection once the context menu is triggered
             self.selection_start = None
             self.selection_end = None
             self.selection_rect = None
@@ -142,33 +130,26 @@ class PDFReader(QMainWindow):
         if not self.selection_rect:
             return []
 
-        # Get the PDF page corresponding to the current page
         page = self.doc.load_page(self.current_page)
 
-        # Get the displayed image dimensions and the original page dimensions
         pixmap_width = self.pdf_label.pixmap().width()
         pixmap_height = self.pdf_label.pixmap().height()
         page_width = page.rect.width
         page_height = page.rect.height
 
-        # Calculate the scale factor based on the current page size and displayed size
         scale_x = page_width / pixmap_width
         scale_y = page_height / pixmap_height
         
-        # Get the current scroll offsets
         scroll_x = self.scroll_area.horizontalScrollBar().value()
         scroll_y = self.scroll_area.verticalScrollBar().value()
 
-        # Adjust the selection rectangle to match the PDF page's coordinates, applying scroll offsets
         x0 = (self.selection_rect.left() + scroll_x) * scale_x
         y0 = (self.selection_rect.top() + scroll_y) * scale_y
         x1 = (self.selection_rect.right() + scroll_x) * scale_x
         y1 = (self.selection_rect.bottom() + scroll_y) * scale_y
 
-        # Extract text rectangles from the selected region
         text_instances = page.get_text("dict", clip=fitz.Rect(x0, y0, x1, y1))['blocks']
 
-        # Collect rectangles of selected text
         text_rects = []
         for block in text_instances:
             for line in block['lines']:
@@ -182,34 +163,27 @@ class PDFReader(QMainWindow):
         if not self.selection_rect:
             return None
 
-        # Get the PDF page corresponding to the current page
         page = self.doc.load_page(self.current_page)
         
-        # Get the displayed image dimensions and the original page dimensions
         pixmap_width = self.pdf_label.pixmap().width()
         pixmap_height = self.pdf_label.pixmap().height()
         page_width = page.rect.width
         page_height = page.rect.height
 
-        # Calculate the scale factor based on the current page size and displayed size
         scale_x = page_width / pixmap_width
         scale_y = page_height / pixmap_height
         
-        # Get the current scroll offsets
         scroll_x = self.scroll_area.horizontalScrollBar().value()
         scroll_y = self.scroll_area.verticalScrollBar().value()
 
-        # Adjust the selection rectangle to match the PDF page's coordinates, applying scroll offsets
         x0 = (self.selection_rect.left() + scroll_x) * scale_x
         y0 = (self.selection_rect.top() + scroll_y) * scale_y
         x1 = (self.selection_rect.right() + scroll_x) * scale_x
         y1 = (self.selection_rect.bottom() + scroll_y) * scale_y
 
-        # Extract the text from the selected region
         selected_text = page.get_text("text", clip=fitz.Rect(x0, y0, x1, y1))
 
-        # Print the selected text to the terminal for debugging
-        print(f"Selected text: '{selected_text.strip()}'")  # Ensure non-empty text
+        print(f"Selected text: '{selected_text.strip()}'")
         
         return selected_text.strip() if selected_text else None
 
@@ -220,11 +194,11 @@ class PDFReader(QMainWindow):
             clean_text = self.clean_word(selected_text)
             words = self.split_into_possible_words(clean_text)
             if words:
-                self.show_word_list(words)  # Show list of possible words
+                self.show_word_list(words)
 
     def clean_word(self, word):
         """Clean and normalize the extracted word to ensure proper Japanese word lookup."""
-        word = re.sub(r'[^\u3040-\u30FF\u4E00-\u9FAF]', '', word)  # Only keep Japanese characters
+        word = re.sub(r'[^\u3040-\u30FF\u4E00-\u9FAF]', '', word)
         return word
 
     def split_into_possible_words(self, text):
@@ -232,7 +206,7 @@ class PDFReader(QMainWindow):
         words = []
         length = len(text)
 
-        # Start checking from the selected text and find valid words
+        
         for start in range(length):
             for end in range(start + 1, length + 1):
                 candidate_word = text[start:end]
@@ -261,17 +235,14 @@ class PDFReader(QMainWindow):
         if entries:
             result_text = ""
             for entry in entries:
-                # Extract the word, reading, and tags
                 word_text = entry.get("word", "")
                 reading = entry.get("reading", "")
                 tags = entry.get("tags", "")
                 
-                # Build the result string
                 result_text += f"Word: {word_text}\n"
                 result_text += f"Reading: {reading}\n"
                 result_text += f"Tags: {tags}\n\n"
     
-                # Extract meanings
                 meanings = entry.get("meaning", [])
                 if meanings:
                     result_text += "Meanings:\n"
@@ -280,7 +251,6 @@ class PDFReader(QMainWindow):
                 else:
                     result_text += "Meanings: None\n"
     
-                # Extract s_inf
                 s_inf = entry.get("notes", [])
                 if s_inf:
                     result_text += "Other Info:\n"
@@ -289,12 +259,11 @@ class PDFReader(QMainWindow):
                 else:
                     result_text += "Other Info: None\n"
     
-                result_text += "\n---\n"  # Separate entries if there are multiple
+                result_text += "\n---\n"
     
         else:
             result_text = "Word not found."
-    
-        # Show the result in a message box
+
         msg = QMessageBox()
         msg.setWindowTitle("Dictionary Entry")
         msg.setText(result_text)
@@ -317,31 +286,24 @@ class PDFReader(QMainWindow):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Draw a blue box around the selected area
         if self.selection_rect:
-            # Get the current scroll offsets
             scroll_x = self.scroll_area.horizontalScrollBar().value()
             scroll_y = self.scroll_area.verticalScrollBar().value()
 
-            # Offset the selection rectangle by the scroll position
             adjusted_rect = self.selection_rect.translated(-scroll_x, -scroll_y)
 
-            # Set the color to a more visible light blue background
-            painter.fillRect(adjusted_rect, QColor(173, 216, 230, 120))  # Light blue highlight with transparency
+            painter.fillRect(adjusted_rect, QColor(173, 216, 230, 120))
 
-            # Draw a clear, solid border around the selection
-            pen = QPen(QColor(0, 0, 255), 2, Qt.SolidLine)  # Blue solid border
+            pen = QPen(QColor(0, 0, 255), 2, Qt.SolidLine)
             painter.setPen(pen)
             painter.drawRect(adjusted_rect)
 
-        # Draw blue highlights over selected text rectangles
         for rect in self.selected_text_rects:
-            # Convert fitz.Rect (from PyMuPDF) to QRectF (for PyQt)
             qrect = QRectF(
-                rect.x0, rect.y0,          # Top-left corner
-                rect.width, rect.height    # Width and height
+                rect.x0, rect.y0,
+                rect.width, rect.height
             )
-            painter.fillRect(qrect, QColor(173, 216, 230, 120))  # Light blue highlight with transparency
+            painter.fillRect(qrect, QColor(173, 216, 230, 120))
 
     def keyPressEvent(self, event):
         """Handle page scrolling with arrow keys."""

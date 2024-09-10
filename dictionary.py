@@ -65,19 +65,18 @@ class JMDict:
         """Search for a word in the dictionary."""
         if word in self.entries:
             results = self.entries[word]
-            # Sort by priority tags (e.g., common words first)
             results.sort(key=lambda x: self.tag_priority(x['tags']))
             return results
         return None
 
     def tag_priority(self, tags):
         """Define priority based on tags (common first, rare last)."""
-        priority = 100  # Default to low priority
+        priority = 100
         if 'ichi' in tags:
-            return 0  # Common
+            return 0
         elif 'news' in tags:
-            return 1  # Used in news
+            return 1
         elif 'rare' in tags:
-            return 99  # Rare
+            return 99
         return priority
     
