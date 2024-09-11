@@ -1,12 +1,14 @@
 import fitz
 from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QMenu, QFileDialog, QPushButton, QHBoxLayout, QWidget, QAction, QListWidget, QMessageBox
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen, QFont
 from PyQt5.QtCore import Qt, QRect, QRectF
 from dictionary import JMDict
+from menu import Menu
 import re
 import keyboard
 
 class PDFReader(QMainWindow):
+    scale_mod = 1
     def __init__(self):
         super().__init__()
         self.setWindowTitle('PDF Reader with Dictionary')
@@ -44,37 +46,12 @@ class PDFReader(QMainWindow):
         self.selection_start = None
         self.selection_end = None
         self.selection_rect = None
-        self.selected_text_rects = [] 
+        self.selected_text_rects = []
         self.doc = None
 
-        menubar = self.menuBar()
-        menuFile = QMenu('File', self) # title and parent
-        open_pdf_action = QAction("Open PDF", self) # title and parent
-        open_pdf_action.setStatusTip("Select a new PDF file to open")
-        open_pdf_action.triggered.connect(self.load_pdf)
-        open_pdf_action.setShortcut("Ctrl+O")
-        menuFile.addAction(open_pdf_action)
-
-        menuView = QMenu('View', self)
-        zoom_in_action = QAction("Zoom In", self)
-        zoom_in_action.setStatusTip("Increase page scale")
-        zoom_in_action.setShortcut("Ctrl++")
-        #zoom_in_action.triggered.connect(self.zoom_in)
-        menuView.addAction(zoom_in_action)
-
-        zoom_out_action = QAction("Zoom Out", self)
-        zoom_out_action.setStatusTip("Decrease page scale")
-        zoom_out_action.setShortcut("Ctrl+-")
-        #zoom_out_action.triggered.connect(self.zoom_out)
-        menuView.addAction(zoom_out_action)
-
-        menubar.addMenu(menuFile)
-        menubar.addMenu(menuView)
-
-    #    self.scale_factor = 1.0
+        Menu(self).init_menu()
 
         self.load_pdf()
-        self.resize_to_fit()
 
     def load_pdf(self):
         """Load the PDF and show the first page."""
@@ -85,28 +62,29 @@ class PDFReader(QMainWindow):
             self.current_page = 0
             self.show_page(self.current_page)
 
-    # def zoom_in(self):
-    #     """Increase the scale factor and refresh the page."""
-    #     self.scale_factor += 0.1  # Increase the scale by 10%
-    #     self.show_page(self.current_page)  # Redisplay the current page with the new scale
+    def zoom_in(self):
+        """Increase the zoom level."""
+        self.scale_mod += 0.1 
+        self.show_page(self.current_page)
 
-    # def zoom_out(self):
-    #     """Decrease the scale factor and refresh the page."""
-    #     if self.scale_factor > 0.1:  # Prevent the scale from going too small
-    #         self.scale_factor -= 0.1  # Decrease the scale by 10%
-    #         self.show_page(self.current_page)
+    def zoom_out(self):
+        """Decrease the zoom level."""
+        if self.scale_mod > 0.2: 
+            self.scale_mod -= 0.1
+            self.show_page(self.current_page)
 
     def show_page(self, page_number):
-        """Display the specified PDF page."""
+        """Display the specified PDF page with the current zoom level."""
         page = self.doc.load_page(page_number)
         scale_factor = self.get_scale_factor(page)
-        pix = page.get_pixmap(matrix=fitz.Matrix(scale_factor, scale_factor))
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale_factor * self.scale_mod, scale_factor * self.scale_mod))
         img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
         self.pdf_label.setPixmap(QPixmap.fromImage(img))
         self.resize_to_fit()
 
     def get_scale_factor(self, page):
         """Calculate the scale factor based on window size and PDF page size."""
+        print("Updating scale factor")
         window_width = self.scroll_area.viewport().width()
         page_width = page.rect.width
         return (window_width / page_width)
@@ -179,8 +157,8 @@ class PDFReader(QMainWindow):
         page_height = page.rect.height
 
         # Calculate scale factors between the displayed image and the PDF page
-        scale_x = page_width / pixmap_width
-        scale_y = page_height / pixmap_height
+        scale_x = (page_width / pixmap_width) * self.scale_mod  # Adjust by zoom factor
+        scale_y = (page_height / pixmap_height) * self.scale_mod  # Adjust by zoom factor
         
         # Adjust selection to PDF coordinates, including scroll offsets
         scroll_x = self.scroll_area.horizontalScrollBar().value()
@@ -217,8 +195,8 @@ class PDFReader(QMainWindow):
         page_height = page.rect.height
 
         # Calculate scaling factors
-        scale_x = page_width / pixmap_width
-        scale_y = page_height / pixmap_height
+        scale_x = (page_width / pixmap_width) * self.scale_mod  # Adjust by zoom factor
+        scale_y = (page_height / pixmap_height) * self.scale_mod  # Adjust by zoom factor
         
         # Adjust selection to PDF coordinates, including scroll offsets
         scroll_x = self.scroll_area.horizontalScrollBar().value()
@@ -264,8 +242,14 @@ class PDFReader(QMainWindow):
 
     def show_word_list(self, words):
         """Show a list of possible words from the selection to choose one for full details."""
+        winSize = 300
+        
         word_list = QListWidget()
         word_list.addItems(words)
+
+        font = QFont()
+        font.setPointSize(15)  # Adjust the size as needed
+        word_list.setFont(font)
 
         def word_selected():
             selected_word = word_list.currentItem().text()
@@ -273,7 +257,7 @@ class PDFReader(QMainWindow):
 
         word_list.itemClicked.connect(word_selected)
         word_list.setWindowTitle("Select a Word")
-        word_list.setGeometry(100, 100, 300, 200)
+        word_list.setGeometry(200, 200, winSize, winSize)
         word_list.show()
 
     def show_definition(self, word):
@@ -317,10 +301,6 @@ class PDFReader(QMainWindow):
         msg.setText(result_text)
         msg.exec_()
 
-
-
-
-
     def show_message(self, text):
         """Show a simple pop-up message."""
         msg = QMessageBox()
@@ -330,27 +310,35 @@ class PDFReader(QMainWindow):
 
     def paintEvent(self, event):
         """Draw the selection rectangle and highlights."""
-        super().paintEvent(event)
+        super().paintEvent(event)  # Ensure the parent class handles its part of the painting
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
+        # Draw a selection rectangle if it exists
         if self.selection_rect:
             scroll_x = self.scroll_area.horizontalScrollBar().value()
             scroll_y = self.scroll_area.verticalScrollBar().value()
 
+            # Adjust the selection rectangle to account for scrolling
             adjusted_rect = self.selection_rect.translated(-scroll_x, -scroll_y)
 
-            painter.fillRect(adjusted_rect, QColor(173, 216, 230, 120))
+            # Set brush for the rectangle's background
+            painter.fillRect(adjusted_rect, QColor(173, 216, 230, 120))  # Light blue with transparency
 
+            # Set pen for the rectangle's outline
             pen = QPen(QColor(0, 0, 255), 2, Qt.SolidLine)
             painter.setPen(pen)
             painter.drawRect(adjusted_rect)
 
+        # Draw highlights over selected text rectangles, if any exist
         for rect in self.selected_text_rects:
+            # Convert the fitz.Rect (PDF rectangle) to QRectF (Qt rectangle) and scale with zoom
             qrect = QRectF(
-                rect.x0, rect.y0,
-                rect.width, rect.height
+                rect.x0 * self.scale_mod, rect.y0 * self.scale_mod,  # Top-left corner
+                rect.width * self.scale_mod, rect.height * self.scale_mod  # Width and height
             )
+
+            # Highlight selected text in light blue
             painter.fillRect(qrect, QColor(173, 216, 230, 120))
 
     def keyPressEvent(self, event):
