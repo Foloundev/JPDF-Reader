@@ -1,7 +1,8 @@
 import fitz
+import pyautogui
 from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QMenu, QFileDialog, QPushButton, QHBoxLayout, QWidget, QAction, QListWidget, QMessageBox
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen, QFont
-from PyQt5.QtCore import Qt, QRect, QRectF
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen, QFont, QBrush
+from PyQt5.QtCore import Qt, QRect, QRectF, QPoint
 from dictionary import JMDict
 from menu import Menu
 import re
@@ -11,8 +12,10 @@ class PDFReader(QMainWindow):
     scale_mod = 1
     def __init__(self):
         super().__init__()
+        self.ScreenWidth = pyautogui.size().width
+        self.ScreenHeight = pyautogui.size().height
         self.setWindowTitle('PDF Reader with Dictionary')
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 720, 720)
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
@@ -35,8 +38,11 @@ class PDFReader(QMainWindow):
         self.selection_start = None
         self.selection_end = None
         self.selection_rect = None
-        self.selected_text_rects = []
         self.doc = None
+
+        self.begin = QPoint()
+        self.end = QPoint()
+        self.show()
 
         Menu(self).init_menu()
 
@@ -80,72 +86,6 @@ class PDFReader(QMainWindow):
 
         super().resizeEvent(event)
 
-    def mousePressEvent(self, event):
-        """Start selection area on mouse press."""
-        if event.button() == Qt.LeftButton:
-            self.selection_start = event.pos()
-
-    def mouseMoveEvent(self, event):
-        """Update selection area on mouse drag."""
-        if self.selection_start:
-            self.selection_end = event.pos()
-            self.selection_rect = QRect(self.selection_start, self.selection_end)
-            self.update()
-
-    def mouseReleaseEvent(self, event):
-        """End selection and show the context menu for dictionary search."""
-        if event.button() == Qt.LeftButton and self.selection_rect:
-            self.selected_text_rects = self.get_selected_text_rects()
-            selected_text = self.get_selected_text()
-            if selected_text:
-                self.context_menu.exec_(event.globalPos())
-            else:
-                self.show_message("No valid text selected.", "Selection Error")
-            
-            # Clear the selection after using it
-            self.selection_start = None
-            self.selection_end = None
-            self.selection_rect = None
-            self.update()
-
-    def get_selected_text_rects(self):
-        """Get the rectangles of the selected text for highlighting."""
-        if not self.selection_rect:
-            return []
-
-        # Get the current page
-        page = self.doc.load_page(self.current_page)
-
-        # Get displayed image and PDF page dimensions
-        pixmap_width = self.pdf_label.pixmap().width()
-        pixmap_height = self.pdf_label.pixmap().height()
-        page_width = page.rect.width
-        page_height = page.rect.height
-
-        # Calculate scale factors between the displayed image and the PDF page
-        scale_x = page_width / pixmap_width  # Adjust by zoom factor
-        scale_y = page_height / pixmap_height  # Adjust by zoom factor
-
-        # Adjust selection to PDF coordinates, including scroll offsets
-        scroll_x = self.scroll_area.horizontalScrollBar().value()
-        scroll_y = self.scroll_area.verticalScrollBar().value()
-
-        # Adjust selection rectangle to PDF coordinates
-        x0 = (self.selection_rect.left() + scroll_x) * scale_x
-        y0 = (self.selection_rect.top() + scroll_y) * scale_y
-        x1 = (self.selection_rect.right() + scroll_x) * scale_x
-        y1 = (self.selection_rect.bottom() + scroll_y) * scale_y
-
-        # Get text rectangles from the selected area in the PDF
-        text_instances = page.get_text("dict", clip=fitz.Rect(x0, y0, x1, y1))['blocks']
-
-        text_rects = []
-        for block in text_instances:
-            for line in block['lines']:
-                for span in line['spans']:
-                    text_rects.append(fitz.Rect(span['bbox']))
-
-        return text_rects
 
     def get_selected_text(self):
         """Extract the selected text based on the selection rectangle."""
@@ -275,38 +215,7 @@ class PDFReader(QMainWindow):
         msg.setText(text)
         msg.exec_()
 
-    def paintEvent(self, event):
-        """Draw the selection rectangle and highlights."""
-        super().paintEvent(event)  # Ensure the parent class handles its part of the painting
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        # Draw a selection rectangle if it exists
-        if self.selection_rect:
-            scroll_x = self.scroll_area.horizontalScrollBar().value()
-            scroll_y = self.scroll_area.verticalScrollBar().value()
-
-            # Adjust the selection rectangle to account for scrolling
-            adjusted_rect = self.selection_rect.translated(-scroll_x, -scroll_y)
-
-            # Set brush for the rectangle's background
-            painter.fillRect(adjusted_rect, QColor(173, 216, 230, 120))  # Light blue with transparency
-
-            # Set pen for the rectangle's outline
-            pen = QPen(QColor(0, 0, 255), 2, Qt.SolidLine)
-            painter.setPen(pen)
-            painter.drawRect(adjusted_rect)
-
-        # Draw highlights over selected text rectangles, if any exist
-        for rect in self.selected_text_rects:
-            # Convert the fitz.Rect (PDF rectangle) to QRectF (Qt rectangle) and scale with zoom
-            qrect = QRectF(
-                rect.x0 * self.scale_mod, rect.y0 * self.scale_mod,  # Top-left corner
-                rect.width * self.scale_mod, rect.height * self.scale_mod  # Width and height
-            )
-
-            # Highlight selected text in light blue
-            painter.fillRect(qrect, QColor(173, 216, 230, 120))
+    
 
     def keyPressEvent(self, event):
         """Handle page scrolling with arrow keys."""
@@ -315,7 +224,68 @@ class PDFReader(QMainWindow):
         elif event.key() == Qt.Key_Left:
             self.prev_page()
 
+    # Text Selection Functions
 
+    def mousePressEvent(self, event):
+        """Start selection area on mouse press."""
+        if event.button() == Qt.LeftButton:
+            self.selection_start = event.pos()
+            self.begin = event.pos()
+            self.end = event.pos()
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        """Update selection area on mouse drag."""
+        if self.selection_start:
+            self.selection_end = event.pos()
+            self.selection_rect = QRect(self.selection_start, self.selection_end)
+            self.end = event.pos()
+            self.update()
+            
+
+    def mouseReleaseEvent(self, event):
+        """End selection and show the context menu for dictionary search."""
+        if event.button() == Qt.LeftButton and self.selection_rect:
+            selected_text = self.get_selected_text()
+            if selected_text:
+                self.context_menu.exec_(event.globalPos())
+                self.begin = event.pos()
+                self.end = event.pos()
+            else:
+                self.show_message("No valid text selected.", "Selection Error")
+          
+            # Clear the selection after using it
+            self.selection_start = None
+            self.selection_end = None
+            self.selection_rect = None
+            self.update()
+
+    def paintEvent(self, event):
+        """Draw the selection rectangle and highlights."""
+        super().paintEvent(event)  # Ensure the parent class handles its part of the painting
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        br = QBrush(QColor(100, 10, 10, 40))  
+        painter.setBrush(br)   
+        painter.drawRect(QRect(self.begin, self.end))   
+
+        # Draw a selection rectangle if it exists
+        # if self.selection_rect:
+        #     scroll_x = self.scroll_area.horizontalScrollBar().value()
+        #     scroll_y = self.scroll_area.verticalScrollBar().value()
+
+        #     # Adjust the selection rectangle to account for scrolling
+        #     adjusted_rect = self.selection_rect.translated(-scroll_x, -scroll_y)
+
+        #     # Set brush for the rectangle's background
+        #     painter.fillRect(adjusted_rect, QColor(173, 216, 230, 120))  # Light blue with transparency
+
+        #     # Set pen for the rectangle's outline
+        #     pen = QPen(QColor(0, 0, 255), 2, Qt.SolidLine)
+        #     painter.setPen(pen)
+        #     painter.drawRect(adjusted_rect)
 
     # Menu Functions
 
