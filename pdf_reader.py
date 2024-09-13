@@ -6,12 +6,14 @@ from PyQt5.QtCore import Qt, QRect, QRectF, QPoint
 from dictionary import JMDict
 from menu import Menu
 import re
-import keyboard
 
 class PDFReader(QMainWindow):
     scale_mod = 1
     def __init__(self):
         super().__init__()
+        self.undo_stack = []
+        self.redo_stack = []
+
         self.ScreenWidth = pyautogui.size().width
         self.ScreenHeight = pyautogui.size().height
         self.setWindowTitle('PDF Reader with Dictionary')
@@ -21,7 +23,7 @@ class PDFReader(QMainWindow):
         self.scroll_area.setWidgetResizable(True)
         self.setCentralWidget(self.scroll_area)
 
-        self.pdf_label = QLabel()
+        self.pdf_label = PDFLabel(self)
         self.pdf_label.setAlignment(Qt.AlignCenter)
         self.scroll_area.setWidget(self.pdf_label)
 
@@ -30,8 +32,10 @@ class PDFReader(QMainWindow):
         self.context_menu = QMenu(self)
         self.search_action = QAction("Search in Dictionary", self)
         self.highlight_action = QAction("Highlight Selection", self)
+
         self.search_action.triggered.connect(self.search_selected_text)
-        self.highlight_action.triggered.connect(self.highlight_error)
+        self.highlight_action.triggered.connect(self.highlight_selection)
+
         self.context_menu.addAction(self.search_action)
         self.context_menu.addAction(self.highlight_action)
 
@@ -44,25 +48,79 @@ class PDFReader(QMainWindow):
         self.end = QPoint()
         self.show()
 
-        Menu(self).init_menu()
+        self.menu = Menu(self)
+        self.menu.init_menu()
 
         self.load_pdf()
 
-    def highlight_error(self):
-        """Show a simple pop-up message."""
-        msg = QMessageBox()
-        msg.setWindowTitle("Highlight Error")
-        msg.setText("Highlight Selection does not yet work.")
-        msg.exec_()
+    def highlight_selection(self):
+        """Highlight the selected text on the PDF page."""
+        print(f"Highlight: Undo Stack Size: {len(self.undo_stack)}, Redo Stack Cleared")
+        if not self.pdf_label.selection_rect:
+            return
+
+        # Load the current page
+        page = self.doc.load_page(self.current_page)
+
+        # Get displayed image and PDF page dimensions
+        pixmap_width = self.pdf_label.pixmap().width()
+        pixmap_height = self.pdf_label.pixmap().height()
+        page_width = page.rect.width
+        page_height = page.rect.height
+
+        # Calculate scaling factors
+        scale_x = page_width / pixmap_width
+        scale_y = page_height / pixmap_height
+
+        # Adjust selection rectangle to PDF coordinates, including scroll offsets
+        scroll_x = self.scroll_area.horizontalScrollBar().value()
+        scroll_y = self.scroll_area.verticalScrollBar().value()
+
+        rect = self.pdf_label.selection_rect
+
+        x0 = (rect.left() + scroll_x) * scale_x
+        y0 = (rect.top() + scroll_y) * scale_y
+        x1 = (rect.right() + scroll_x) * scale_x
+        y1 = (rect.bottom() + scroll_y) * scale_y
+
+        # Create a rectangle in PDF coordinates
+        pdf_rect = fitz.Rect(x0, y0, x1, y1)
+
+        # Add highlight annotation to the rectangle
+        annot = page.add_highlight_annot(pdf_rect)
+        annot.set_colors(stroke=fitz.utils.getColor('yellow'))
+        annot.update()
+
+        # Record the action in the undo stack
+        self.undo_stack.append({
+            'action': 'highlight',
+            'page': self.current_page,
+            'annot': annot,
+            'rect': pdf_rect  # Store the rectangle
+        })
+        # Clear the redo stack
+        self.redo_stack.clear()
+        # Enable the Undo action
+        self.undo_action.setEnabled(True)
+        # Disable the Redo action
+        self.redo_action.setEnabled(False)
+
+        # Re-render the page to show the highlight
+        self.show_page(self.current_page)
 
     def show_page(self, page_number):
         """Display the specified PDF page with the current zoom level."""
         page = self.doc.load_page(page_number)
         scale_factor = self.get_scale_factor(page)
-        pix = page.get_pixmap(matrix=fitz.Matrix(scale_factor * self.scale_mod, scale_factor * self.scale_mod))
+        pix = page.get_pixmap(
+            matrix=fitz.Matrix(scale_factor * self.scale_mod, scale_factor * self.scale_mod),
+            annots=True  # Include annotations
+        )
         img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
         self.pdf_label.setPixmap(QPixmap.fromImage(img))
         self.resize_to_fit()
+
+
 
     def get_scale_factor(self, page):
         """Calculate the scale factor based on window size and PDF page size."""
@@ -89,7 +147,7 @@ class PDFReader(QMainWindow):
 
     def get_selected_text(self):
         """Extract the selected text based on the selection rectangle."""
-        if not self.selection_rect:
+        if not self.pdf_label.selection_rect:
             return None
 
         # Load the current page
@@ -102,23 +160,25 @@ class PDFReader(QMainWindow):
         page_height = page.rect.height
 
         # Calculate scaling factors
-        scale_x = page_width / pixmap_width  # Adjust by zoom factor
-        scale_y = page_height / pixmap_height  # Adjust by zoom factor
+        scale_x = page_width / pixmap_width
+        scale_y = page_height / pixmap_height
 
-        # Adjust selection to PDF coordinates, including scroll offsets
+        # Adjust selection rectangle to PDF coordinates, including scroll offsets
         scroll_x = self.scroll_area.horizontalScrollBar().value()
         scroll_y = self.scroll_area.verticalScrollBar().value()
 
-        # Adjust selection rectangle to PDF coordinates
-        x0 = (self.selection_rect.left() + scroll_x) * scale_x
-        y0 = (self.selection_rect.top() + scroll_y) * scale_y
-        x1 = (self.selection_rect.right() + scroll_x) * scale_x
-        y1 = (self.selection_rect.bottom() + scroll_y) * scale_y
+        rect = self.pdf_label.selection_rect
+
+        x0 = (rect.left() + scroll_x) * scale_x
+        y0 = (rect.top() + scroll_y) * scale_y
+        x1 = (rect.right() + scroll_x) * scale_x
+        y1 = (rect.bottom() + scroll_y) * scale_y
 
         # Extract text from the selected region
         selected_text = page.get_text("text", clip=fitz.Rect(x0, y0, x1, y1))
 
         return selected_text.strip() if selected_text else None
+
 
     def search_selected_text(self):
         """Search the selected text in the dictionary."""
@@ -226,67 +286,7 @@ class PDFReader(QMainWindow):
 
     # Text Selection Functions
 
-    def mousePressEvent(self, event):
-        """Start selection area on mouse press."""
-        if event.button() == Qt.LeftButton:
-            self.selection_start = event.pos()
-            self.begin = event.pos()
-            self.end = event.pos()
-            self.update()
-
-    def mouseMoveEvent(self, event):
-        """Update selection area on mouse drag."""
-        if self.selection_start:
-            self.selection_end = event.pos()
-            self.selection_rect = QRect(self.selection_start, self.selection_end)
-            self.end = event.pos()
-            self.update()
-            
-
-    def mouseReleaseEvent(self, event):
-        """End selection and show the context menu for dictionary search."""
-        if event.button() == Qt.LeftButton and self.selection_rect:
-            selected_text = self.get_selected_text()
-            if selected_text:
-                self.context_menu.exec_(event.globalPos())
-                self.begin = event.pos()
-                self.end = event.pos()
-            else:
-                self.show_message("No valid text selected.", "Selection Error")
-          
-            # Clear the selection after using it
-            self.selection_start = None
-            self.selection_end = None
-            self.selection_rect = None
-            self.update()
-
-    def paintEvent(self, event):
-        """Draw the selection rectangle and highlights."""
-        super().paintEvent(event)  # Ensure the parent class handles its part of the painting
-
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        br = QBrush(QColor(100, 10, 10, 40))  
-        painter.setBrush(br)   
-        painter.drawRect(QRect(self.begin, self.end))   
-
-        # Draw a selection rectangle if it exists
-        # if self.selection_rect:
-        #     scroll_x = self.scroll_area.horizontalScrollBar().value()
-        #     scroll_y = self.scroll_area.verticalScrollBar().value()
-
-        #     # Adjust the selection rectangle to account for scrolling
-        #     adjusted_rect = self.selection_rect.translated(-scroll_x, -scroll_y)
-
-        #     # Set brush for the rectangle's background
-        #     painter.fillRect(adjusted_rect, QColor(173, 216, 230, 120))  # Light blue with transparency
-
-        #     # Set pen for the rectangle's outline
-        #     pen = QPen(QColor(0, 0, 255), 2, Qt.SolidLine)
-        #     painter.setPen(pen)
-        #     painter.drawRect(adjusted_rect)
-
+   
     # Menu Functions
 
     def zoom_in(self):
@@ -320,3 +320,106 @@ class PDFReader(QMainWindow):
             self.doc = fitz.open(file_path)
             self.current_page = 0
             self.show_page(self.current_page)  # Only load the first page
+
+    def undo_last_action(self):
+        """Undo the last action."""
+        print("Undo action triggered")
+        if not self.undo_stack:
+            return
+
+        last_action = self.undo_stack.pop()
+        action_type = last_action['action']
+
+        if action_type == 'highlight':
+            page_number = last_action['page']
+            annot = last_action['annot']
+            page = self.doc.load_page(page_number)
+            page.delete_annot(annot)
+            self.redo_stack.append(last_action)
+            self.show_page(page_number)
+
+        # Disable Undo if no more actions
+        if not self.undo_stack:
+            self.undo_action.setEnabled(False)
+        # Enable Redo
+        self.redo_action.setEnabled(True)
+
+    def redo_last_action(self):
+        """Redo the last undone action."""
+        print("Redo action triggered")
+        if not self.redo_stack:
+            return
+
+        action = self.redo_stack.pop()
+        action_type = action['action']
+
+        if action_type == 'highlight':
+            page_number = action['page']
+            annot_rect = action['rect']
+            page = self.doc.load_page(page_number)
+            # Recreate the highlight annotation
+            annot = page.add_highlight_annot(annot_rect)
+            annot.set_colors(stroke=fitz.utils.getColor('yellow'))  # Correct color setting
+            annot.update()
+            # Update the action with the new annotation reference
+            action['annot'] = annot
+            self.undo_stack.append(action)
+            self.show_page(page_number)
+
+        # Disable Redo if no more actions
+        if not self.redo_stack:
+            self.redo_action.setEnabled(False)
+        # Enable Undo
+        self.undo_action.setEnabled(True)
+
+
+
+class PDFLabel(QLabel):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.main_window = parent  # Store reference to PDFReader
+        self.selection_start = None
+        self.selection_end = None
+        self.selection_rect = None
+        self.begin = QPoint()
+        self.end = QPoint()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.selection_start = event.pos()
+            self.begin = event.pos()
+            self.end = event.pos()
+            self.update()
+
+    def mouseMoveEvent(self, event):
+        if self.selection_start:
+            self.selection_end = event.pos()
+            self.selection_rect = QRect(self.selection_start, self.selection_end)
+            self.end = event.pos()
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.selection_rect:
+            selected_text = self.main_window.get_selected_text()  # Use self.main_window
+            if selected_text:
+                self.main_window.context_menu.exec_(event.globalPos())
+                self.begin = QPoint()
+                self.end = QPoint()
+            else:
+                self.main_window.show_message("No valid text selected.", "Selection Error")
+            # Clear the selection after using it
+            self.selection_start = None
+            self.selection_end = None
+            self.selection_rect = None
+            self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.selection_rect:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            br = QBrush(QColor(0, 0, 255, 50))  # Blue with transparency
+            painter.setBrush(br)
+            painter.setPen(QPen(QColor(0, 0, 255), 1))
+            painter.drawRect(QRect(self.begin, self.end))
+

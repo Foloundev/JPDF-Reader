@@ -10,34 +10,59 @@ class Menu:
         """Initialize the menu and add it to the parent."""
         menubar = self.parent.menuBar()  # Get the menubar from the parent (PDFReader)
 
-        # File menu
+
+        # File Menu
         menuFile = menubar.addMenu('File')
+
+        # Open PDF
         open_pdf_action = QAction("Open PDF", self.parent)
         open_pdf_action.setStatusTip("Select a new PDF file to open")
         open_pdf_action.triggered.connect(self.parent.load_pdf)  # Use parent's load_pdf method
         open_pdf_action.setShortcut("Ctrl+O")
         menuFile.addAction(open_pdf_action)
 
-        # View menu
+        # Edit Menu
+        menuEdit = menubar.addMenu('Edit')
+
+        # Undo
+        undo_action = QAction("Undo", self.parent)        
+        undo_action.triggered.connect(self.parent.undo_last_action)
+        menuEdit.addAction(undo_action)
+        undo_action.setEnabled(False)
+        self.parent.undo_action = undo_action
+        
+        # Redo
+        redo_action = QAction("Redo", self.parent)
+        redo_action.triggered.connect(self.parent.redo_last_action)
+        menuEdit.addAction(redo_action)
+        redo_action.setEnabled(False)
+        self.parent.redo_action = redo_action
+
+        # View Menu
         menuView = menubar.addMenu('View')
+
+        #Zoom In
         zoom_in_action = QAction("Zoom In", self.parent)
         zoom_in_action.setStatusTip("Increase page scale")
         zoom_in_action.setShortcut("Ctrl++")
         zoom_in_action.triggered.connect(self.parent.zoom_in)
         menuView.addAction(zoom_in_action)
 
+        # Zoom Out
         zoom_out_action = QAction("Zoom Out", self.parent)
         zoom_out_action.setStatusTip("Decrease page scale")
         zoom_out_action.setShortcut("Ctrl+-")
         zoom_out_action.triggered.connect(self.parent.zoom_out)
         menuView.addAction(zoom_out_action)
 
+        # Previous Page
         page_prev_action = QAction("Previous Page", self.parent)
         page_prev_action.setStatusTip("Move to previous page")
         page_prev_action.setShortcut(QtCore.Qt.Key_Left)
         page_prev_action.triggered.connect(self.parent.prev_page)
         menuView.addAction(page_prev_action)
 
+        #Next Page
         page_next_action = QAction("Next Page", self.parent)
         page_next_action.setStatusTip("Move to next page")
         page_next_action.setShortcut(QtCore.Qt.Key_Right)
@@ -46,4 +71,5 @@ class Menu:
 
         # Add menus to the menubar
         menubar.addMenu(menuFile)
+        menubar.addMenu(menuEdit)
         menubar.addMenu(menuView)
