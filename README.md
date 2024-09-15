@@ -11,3 +11,4 @@
  - ### Custom Highlight Color
  - ### Highlight Notes
  - ### Custom Dictionary Loader
+ - ### Katakana Reader 
