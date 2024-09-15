@@ -9,6 +9,6 @@
 
 # Upcoming Features
  - ### Custom Highlight Color
- - ### Highlight Notes
+ - ### Highlight Notes (With Saving)
  - ### Custom Dictionary Loader
  - ### Katakana Reader 
