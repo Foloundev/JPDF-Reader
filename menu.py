@@ -1,5 +1,4 @@
-import fitz
-from PyQt5.QtWidgets import QMainWindow, QMenu, QAction, QFileDialog
+from PyQt5.QtWidgets import QMenu, QAction
 from PyQt5 import QtCore
 
 class Menu:
@@ -8,8 +7,7 @@ class Menu:
 
     def init_menu(self):
         """Initialize the menu and add it to the parent."""
-        menubar = self.parent.menuBar()  # Get the menubar from the parent (PDFReader)
-
+        menubar = self.parent.menuBar()
 
         # File Menu
         menuFile = menubar.addMenu('File')
@@ -17,31 +15,14 @@ class Menu:
         # Open PDF
         open_pdf_action = QAction("Open PDF", self.parent)
         open_pdf_action.setStatusTip("Select a new PDF file to open")
-        open_pdf_action.triggered.connect(self.parent.load_pdf)  # Use parent's load_pdf method
+        open_pdf_action.triggered.connect(self.parent.load_pdf)
         open_pdf_action.setShortcut("Ctrl+O")
         menuFile.addAction(open_pdf_action)
-
-        # Edit Menu
-        menuEdit = menubar.addMenu('Edit')
-
-        # Undo
-        undo_action = QAction("Undo", self.parent)        
-        undo_action.triggered.connect(self.parent.undo_last_action)
-        menuEdit.addAction(undo_action)
-        undo_action.setEnabled(False)
-        self.parent.undo_action = undo_action
-        
-        # Redo
-        redo_action = QAction("Redo", self.parent)
-        redo_action.triggered.connect(self.parent.redo_last_action)
-        menuEdit.addAction(redo_action)
-        redo_action.setEnabled(False)
-        self.parent.redo_action = redo_action
 
         # View Menu
         menuView = menubar.addMenu('View')
 
-        #Zoom In
+        # Zoom In
         zoom_in_action = QAction("Zoom In", self.parent)
         zoom_in_action.setStatusTip("Increase page scale")
         zoom_in_action.setShortcut("Ctrl++")
@@ -62,7 +43,7 @@ class Menu:
         page_prev_action.triggered.connect(self.parent.prev_page)
         menuView.addAction(page_prev_action)
 
-        #Next Page
+        # Next Page
         page_next_action = QAction("Next Page", self.parent)
         page_next_action.setStatusTip("Move to next page")
         page_next_action.setShortcut(QtCore.Qt.Key_Right)
@@ -71,5 +52,4 @@ class Menu:
 
         # Add menus to the menubar
         menubar.addMenu(menuFile)
-        menubar.addMenu(menuEdit)
         menubar.addMenu(menuView)
