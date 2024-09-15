@@ -1,13 +1,13 @@
-# JPDF-Reader
-## Current Features:
- - Gather all words in selection and give as options
- - Open new PDF file
- - Zoom in/out
+# **JPDF Reader Version 0.3**
+## Main Features
+ - ### Text Selection
+ - ### Word Look-up
+ - ### Text/Word Copy
+![image](https://github.com/user-attachments/assets/10f2c8a1-46ef-4702-ae17-5f61b84cbccc)
+ - ### Text Highlighting
+![image](https://github.com/user-attachments/assets/43de68bd-b048-48f5-ba67-71d5d889e8ff)
 
-![image](https://github.com/user-attachments/assets/fea93f67-d5b8-46ae-b34f-6395498e76f2)
-
-
-## Current Problems
- - Not visible what you're selecting
- - Zoom in/out works, except in a few specific cases
- - When program is started the text selection doesn't work until the window it's resized
+# Upcoming Features
+ - ### Custom Highlight Color
+ - ### Highlight Notes
+ - ### Custom Dictionary Loader
