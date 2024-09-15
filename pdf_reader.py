@@ -1,6 +1,6 @@
 import fitz
 import pyautogui
-from PyQt5.QtWidgets import QMainWindow, QLabel, QScrollArea, QMenu, QFileDialog, QAction, QListWidget, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QScrollArea, QMenu, QFileDialog, QAction, QListWidget, QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit, QWidget
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen, QFont, QBrush
 from PyQt5.QtCore import Qt, QRect, QPoint
 from dictionary import JMDict
@@ -16,12 +16,20 @@ class PDFReader(QMainWindow):
         self.setGeometry(100, 100, 720, 720)
 
         self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
         self.setCentralWidget(self.scroll_area)
 
         self.pdf_label = PDFLabel(self)
-        self.pdf_label.setAlignment(Qt.AlignCenter)
-        self.scroll_area.setWidget(self.pdf_label)
+
+        self.layout = QVBoxLayout()
+        self.layout.setAlignment(Qt.AlignCenter)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
+
+        self.container = QWidget()
+        self.container.setLayout(self.layout)
+
+        self.layout.addWidget(self.pdf_label)
+        self.scroll_area.setWidget(self.container)
 
         self.dictionary = JMDict('./JMdict.xml')
 
@@ -47,30 +55,23 @@ class PDFReader(QMainWindow):
         self.load_pdf()
 
     def highlight_selection(self):
-        """Highlight the selected text on the PDF page."""
         if not self.pdf_label.selection_rect:
             return
 
-        # Load the current page
         page = self.doc.load_page(self.current_page)
-
-        # Adjust selection rectangle to PDF coordinates, including scroll offsets
-        scroll_x = self.scroll_area.horizontalScrollBar().value()
-        scroll_y = self.scroll_area.verticalScrollBar().value()
-
         rect = self.pdf_label.selection_rect
 
-        # Screen coordinates (on the label)
-        x0_screen = rect.left() + scroll_x
-        y0_screen = rect.top() + scroll_y
-        x1_screen = rect.right() + scroll_x
-        y1_screen = rect.bottom() + scroll_y
+        # Map the selection rectangle coordinates to PDF coordinates
+        x0_pixmap = rect.left()
+        y0_pixmap = rect.top()
+        x1_pixmap = rect.right()
+        y1_pixmap = rect.bottom()
 
-        # Map screen coordinates to PDF coordinates
-        x0_pdf = x0_screen / self.scale_factor
-        y0_pdf = y0_screen / self.scale_factor
-        x1_pdf = x1_screen / self.scale_factor
-        y1_pdf = y1_screen / self.scale_factor
+        # Map pixmap coordinates to PDF coordinates
+        x0_pdf = x0_pixmap / self.scale_factor
+        y0_pdf = y0_pixmap / self.scale_factor
+        x1_pdf = x1_pixmap / self.scale_factor
+        y1_pdf = y1_pixmap / self.scale_factor
 
         # Create a rectangle in PDF coordinates
         pdf_rect = fitz.Rect(x0_pdf, y0_pdf, x1_pdf, y1_pdf)
@@ -83,14 +84,15 @@ class PDFReader(QMainWindow):
         # Re-render the page to show the highlight
         self.show_page(self.current_page)
 
+
     def show_page(self, page_number):
         """Display the specified PDF page with the current zoom level."""
         page = self.doc.load_page(page_number)
 
-        # Calculate the base scale factor to fit the page width to the window width
-        window_width = self.scroll_area.viewport().width()
+        # Calculate the base scale factor to fit the page width to the viewport width
+        viewport_width = self.scroll_area.viewport().width()
         page_width = page.rect.width
-        base_scale = window_width / page_width
+        base_scale = viewport_width / page_width
 
         # Calculate the total scale factor including zoom level
         self.scale_factor = base_scale * self.scale_mod
@@ -100,9 +102,15 @@ class PDFReader(QMainWindow):
             matrix=fitz.Matrix(self.scale_factor, self.scale_factor),
             annots=True  # Include annotations
         )
+
         img = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
         self.pdf_label.setPixmap(QPixmap.fromImage(img))
-        self.resize_to_fit()
+
+        # Adjust the label size
+        self.pdf_label.resize(pix.width, pix.height)
+
+        # Ensure the scroll area resizes the widget
+        self.scroll_area.setWidgetResizable(True)
 
     def resize_to_fit(self):
         """Ensure the page is centered in the window."""
@@ -115,35 +123,27 @@ class PDFReader(QMainWindow):
         super().resizeEvent(event)
 
     def get_selected_text(self):
-        """Extract the selected text based on the selection rectangle."""
         if not self.pdf_label.selection_rect:
             return None
 
-        # Load the current page
         page = self.doc.load_page(self.current_page)
-
-        # Adjust selection rectangle to PDF coordinates, including scroll offsets
-        scroll_x = self.scroll_area.horizontalScrollBar().value()
-        scroll_y = self.scroll_area.verticalScrollBar().value()
-
         rect = self.pdf_label.selection_rect
 
-        # Screen coordinates (on the label)
-        x0_screen = rect.left() + scroll_x
-        y0_screen = rect.top() + scroll_y
-        x1_screen = rect.right() + scroll_x
-        y1_screen = rect.bottom() + scroll_y
+        # Adjust rectangle coordinates
+        x0 = rect.left() - self.pdf_label.get_label_position()[0] - self.scroll_area.horizontalScrollBar().value()
+        y0 = rect.top() - self.pdf_label.get_label_position()[1] - self.scroll_area.verticalScrollBar().value()
+        x1 = rect.right() - self.pdf_label.get_label_position()[0] - self.scroll_area.horizontalScrollBar().value()
+        y1 = rect.bottom() - self.pdf_label.get_label_position()[1] - self.scroll_area.verticalScrollBar().value()
 
-        # Map screen coordinates to PDF coordinates
-        x0_pdf = x0_screen / self.scale_factor
-        y0_pdf = y0_screen / self.scale_factor
-        x1_pdf = x1_screen / self.scale_factor
-        y1_pdf = y1_screen / self.scale_factor
+        # Map to PDF coordinates
+        x0_pdf = x0 / self.scale_factor
+        y0_pdf = y0 / self.scale_factor
+        x1_pdf = x1 / self.scale_factor
+        y1_pdf = y1 / self.scale_factor
 
-        # Extract text from the selected region
         selected_text = page.get_text("text", clip=fitz.Rect(x0_pdf, y0_pdf, x1_pdf, y1_pdf))
-
-        return selected_text.strip() if selected_text else None
+        self.last_selected_text = selected_text.strip() if selected_text else None
+        return self.last_selected_text
 
     def search_selected_text(self):
         """Search the selected text in the dictionary."""
@@ -152,7 +152,8 @@ class PDFReader(QMainWindow):
             clean_text = self.clean_word(selected_text)
             words = self.split_into_possible_words(clean_text)
             if words:
-                self.show_word_list(words)
+                self.show_word_list(words, selected_text)
+
 
     def clean_word(self, word):
         """Clean and normalize the extracted word for Japanese word lookup."""
@@ -171,28 +172,59 @@ class PDFReader(QMainWindow):
                     words.append(candidate_word)
         return words
 
-    def show_word_list(self, words):
+    def show_word_list(self, words, selected_text):
         """Show a list of possible words from the selection to choose one for full details."""
-        winSize = 300
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Select a Word")
+        dialog.setGeometry(200, 200, 300, 400)
+
+        layout = QVBoxLayout()
 
         word_list = QListWidget()
         word_list.addItems(words)
 
         font = QFont()
-        font.setPointSize(15)
+        font.setPointSize(30)
         word_list.setFont(font)
+
+        layout.addWidget(word_list)
+
+        button_layout = QHBoxLayout()
+
+        copy_button = QPushButton("Copy")
+        button_layout.addWidget(copy_button)
+
+        close_button = QPushButton("Close")
+        button_layout.addWidget(close_button)
+
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
 
         def word_selected():
             selected_word = word_list.currentItem().text()
             self.show_definition(selected_word)
 
         word_list.itemClicked.connect(word_selected)
-        word_list.setWindowTitle("Select a Word")
-        word_list.setGeometry(200, 200, winSize, winSize)
-        word_list.show()
+
+        # Copy button functionality
+        def copy_selected_text():
+            clipboard = QApplication.clipboard()
+            clipboard.setText(selected_text)
+            QMessageBox.information(self, "Copied", "Selected text copied to clipboard.")
+
+        copy_button.clicked.connect(copy_selected_text)
+        close_button.clicked.connect(dialog.close)
+
+        dialog.exec_()
+
 
     def show_definition(self, word):
         """Show the dictionary definition in a pop-up."""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTextEdit
+
         entries = self.dictionary.search_word(word)
 
         if entries:
@@ -227,10 +259,43 @@ class PDFReader(QMainWindow):
         else:
             result_text = "Word not found."
 
-        msg = QMessageBox()
-        msg.setWindowTitle("Dictionary Entry")
-        msg.setText(result_text)
-        msg.exec_()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Dictionary Entry")
+        dialog.setGeometry(200, 200, 400, 400)
+
+        layout = QVBoxLayout()
+
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setText(result_text)
+        layout.addWidget(text_edit)
+        
+        font = QFont()
+        font.setPointSize(20)
+        text_edit.setFont(font)
+
+        button_layout = QHBoxLayout()
+
+        copy_button = QPushButton("Copy")
+        button_layout.addWidget(copy_button)
+
+        close_button = QPushButton("Close")
+        button_layout.addWidget(close_button)
+
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
+
+        # Copy button functionality
+        def copy_word():
+            clipboard = QApplication.clipboard()
+            clipboard.setText(word)
+            QMessageBox.information(self, "Copied", f"'{word}' copied to clipboard.")
+
+        copy_button.clicked.connect(copy_word)
+        close_button.clicked.connect(dialog.close)
+
+        dialog.exec_()
 
     def show_message(self, text, title):
         """Show a simple pop-up message."""
@@ -258,6 +323,7 @@ class PDFReader(QMainWindow):
         if self.scale_mod > 0.2:
             self.scale_mod -= 0.1
             self.show_page(self.current_page)
+
 
     def next_page(self):
         """Go to the next page."""
@@ -287,30 +353,41 @@ class PDFLabel(QLabel):
         self.selection_start = None
         self.selection_end = None
         self.selection_rect = None
-        self.begin = QPoint()
-        self.end = QPoint()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.selection_start = event.pos()
-            self.begin = event.pos()
-            self.end = event.pos()
+            label_x, label_y = self.get_label_position()
+            scroll_x = self.main_window.scroll_area.horizontalScrollBar().value()
+            scroll_y = self.main_window.scroll_area.verticalScrollBar().value()
+            pos_x = event.pos().x() + label_x + scroll_x
+            pos_y = event.pos().y() + label_y + scroll_y
+            self.selection_start = QPoint(int(pos_x), int(pos_y))
             self.update()
+
 
     def mouseMoveEvent(self, event):
         if self.selection_start:
-            self.selection_end = event.pos()
+            label_x, label_y = self.get_label_position()
+            scroll_x = self.main_window.scroll_area.horizontalScrollBar().value()
+            scroll_y = self.main_window.scroll_area.verticalScrollBar().value()
+            pos_x = label_x + event.pos().x() + scroll_x
+            pos_y = label_y + event.pos().y() + scroll_y
+            self.selection_end = QPoint(pos_x, pos_y)
             self.selection_rect = QRect(self.selection_start, self.selection_end)
-            self.end = event.pos()
             self.update()
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self.selection_rect:
+            label_x, label_y = self.get_label_position()
+            scroll_x = self.main_window.scroll_area.horizontalScrollBar().value()
+            scroll_y = self.main_window.scroll_area.verticalScrollBar().value()
+            pos_x = label_x + event.pos().x() + scroll_x
+            pos_y = label_y + event.pos().y() + scroll_y
+            self.selection_end = QPoint(pos_x, pos_y)
+            self.selection_rect = QRect(self.selection_start, self.selection_end)
             selected_text = self.main_window.get_selected_text()
             if selected_text:
                 self.main_window.context_menu.exec_(event.globalPos())
-                self.begin = QPoint()
-                self.end = QPoint()
             else:
                 self.main_window.show_message("No valid text selected.", "Selection Error")
             # Clear the selection after using it
@@ -327,4 +404,25 @@ class PDFLabel(QLabel):
             br = QBrush(QColor(0, 0, 255, 50))
             painter.setBrush(br)
             painter.setPen(QPen(QColor(0, 0, 255), 1))
-            painter.drawRect(QRect(self.begin, self.end))
+
+            # Get positions
+            label_x, label_y = self.get_label_position()
+            scroll_x = self.main_window.scroll_area.horizontalScrollBar().value()
+            scroll_y = self.main_window.scroll_area.verticalScrollBar().value()
+
+            # Adjust selection start and end positions
+            x0 = self.selection_start.x() - label_x - scroll_x
+            y0 = self.selection_start.y() - label_y - scroll_y
+            x1 = self.selection_end.x() - label_x - scroll_x
+            y1 = self.selection_end.y() - label_y - scroll_y
+
+            # Create QRect with adjusted positions
+            rect = QRect(int(x0), int(y0), int(x1 - x0), int(y1 - y0))
+            painter.drawRect(rect)
+            painter.end()
+    def get_label_position(self):
+        """Get the position of the label within the scroll area's viewport."""
+        pos = self.mapTo(self.main_window.scroll_area.viewport(), QPoint(0, 0))
+        return pos.x(), pos.y()
+
+    
